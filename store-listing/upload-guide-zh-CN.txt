@@ -1,0 +1,34 @@
+QRisp 1.0.0 · Chrome 网上应用店填写指南
+
+商品详情
+• 将 description-zh-CN.txt 全文粘贴到「说明」。
+• 类别选「工具」（Tools），语言选「中文（简体）」。
+• 商店图标上传 store-icon-128.png（128 × 128）。
+• 屏幕截图依次上传 screenshot-01-page.png、screenshot-02-custom.png、screenshot-03-formats.png（均为 1280 × 800）。图片展示实际扩展弹窗，使用示例网页和演示文字。
+• 小型宣传图块上传 promo-small-440x280.png（440 × 280，可选）。
+• 顶部宣传图块上传 promo-marquee-1400x560.png（1400 × 560，可选）。
+• 全球通用的宣传视频可留空。
+• 官方网址可保持「无」。首页网址、支持信息页面网址可留空，商品支持可用商店内置入口。
+• 「成人内容」保持关闭。
+
+隐私权
+
+单一用途说明
+将用户主动打开扩展时所在标签页的网址，或用户输入的网址和文字，在本机生成可复制或下载的二维码。
+
+activeTab 权限说明
+用户打开扩展弹窗时，读取当前活动标签页的标题和网址，在弹窗中显示标题、为网址生成二维码，并在用户点击「复制链接」时复制该网址。
+
+clipboardWrite 权限说明
+用户点击「复制链接」或「复制二维码」时，将当前网址或生成的 PNG 二维码图片写入系统剪贴板。
+
+其他隐私字段
+• 远程代码选择「否」。二维码脚本和界面资源随扩展打包。
+• 数据用途按实际行为披露。扩展在弹窗内临时处理当前标签页标题、网址和用户输入，仅用于生成、复制或下载二维码及复制链接。开发者不接收这些内容，扩展无遥测、广告或后台浏览记录。按控制台字段定义核对数据类型及用途声明。
+• 将 privacy-policy.html 放到一个无需登录即可访问的 HTTPS 地址，再将该地址填入「隐私权政策网址」。政策使用商店内置的商品支持入口作为联系方式。
+
+Chrome 官方资料
+商品详情 https://developer.chrome.com/docs/webstore/cws-dashboard-listing
+类别 https://developer.chrome.com/docs/webstore/best-practices#choose-your-extensions-category-well
+隐私披露 https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
+隐私政策要求 https://developer.chrome.com/docs/webstore/program-policies/privacy
