@@ -25,7 +25,7 @@ clipboardWrite 权限说明
 其他隐私字段
 • 远程代码选择「否」。二维码脚本和界面资源随扩展打包。
 • 数据用途按实际行为披露。扩展在弹窗内临时处理当前标签页标题、网址和用户输入，仅用于生成、复制或下载二维码及复制链接。开发者不接收这些内容，扩展无遥测、广告或后台浏览记录。按控制台字段定义核对数据类型及用途声明。
-• 将 privacy-policy.html 放到一个无需登录即可访问的 HTTPS 地址，再将该地址填入「隐私权政策网址」。政策使用商店内置的商品支持入口作为联系方式。
+• 「隐私权政策网址」填写 https://blkdash.github.io/qrisp-privacy/。页面已通过 GitHub Pages 发布，无需登录即可访问。政策使用商店内置的商品支持入口作为联系方式。
 
 Chrome 官方资料
 商品详情 https://developer.chrome.com/docs/webstore/cws-dashboard-listing
