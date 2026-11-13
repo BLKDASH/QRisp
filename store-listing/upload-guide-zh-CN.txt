@@ -1,4 +1,4 @@
-QRisp 1.0.0 · Chrome 网上应用店填写指南
+QRisp 1.0.1 · Chrome 网上应用店填写指南
 
 商品详情
 • 将 description-zh-CN.txt 全文粘贴到「说明」。
