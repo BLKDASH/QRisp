@@ -1,1 +1,18 @@
-{"manifest_version":3,"name":"QRisp","version":"1.0.1","description":"将当前网址或自定义文字变成二维码。离线生成，支持下载二维码、复制二维码图片和复制当前网址。","permissions":["activeTab","clipboardWrite"],"action":{"default_title":"QRisp","default_popup":"popup.html","default_icon":{"16":"icons/icon16.png","32":"icons/icon32.png","48":"icons/icon48.png","128":"icons/icon128.png"}},"icons":{"16":"icons/icon16.png","32":"icons/icon32.png","48":"icons/icon48.png","128":"icons/icon128.png"},"content_security_policy":{"extension_pages":"script-src 'self'; object-src 'none'; connect-src 'none'"}}
+{
+  "manifest_version": 3,
+  "name": "QRisp",
+  "version": "1.1.0",
+  "description": "将当前网址、网页选中文字或自定义内容离线生成二维码，支持复制和下载。",
+  "permissions": ["activeTab", "clipboardWrite", "contextMenus"],
+  "background": { "service_worker": "background.js" },
+  "incognito": "split",
+  "action": {
+    "default_title": "QRisp",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'"
+  }
+}

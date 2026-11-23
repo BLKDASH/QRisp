@@ -8,6 +8,7 @@
 </head>
 <body>
   <main>
+    <h1 id="selection-heading" hidden>所选文字</h1>
     <div class="tabs" role="tablist" aria-label="内容来源">
       <button id="page-tab" type="button" role="tab" aria-selected="true" aria-controls="page-panel">
         <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
@@ -54,7 +55,7 @@
     <section id="custom-panel" role="tabpanel" aria-labelledby="custom-tab" hidden>
       <div class="input-field">
         <label class="sr-only" for="content">输入网址或文字</label>
-        <textarea id="content" placeholder="输入网址或文字…" spellcheck="false" aria-describedby="status"></textarea>
+        <textarea id="content" placeholder="输入网址或文字…" spellcheck="false" autocomplete="off" aria-describedby="status"></textarea>
       </div>
     </section>
 
@@ -88,6 +89,7 @@
     </div>
   </main>
   <script src="vendor/qr.js"></script>
+  <script src="qr-input.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -31,6 +31,17 @@ main {
   padding: 18px 20px;
 }
 
+body.selection {
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+}
+
+#selection-heading {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
 button {
   display: inline-flex;
   align-items: center;

@@ -49,6 +49,7 @@ const shots = [
 const popupSource = fs.readFileSync(path.join(root, 'popup.html'), 'utf8')
   .replace('href="popup.css"', `href="${asset('popup.css')}"`)
   .replace('src="vendor/qr.js"', `src="${asset('vendor/qr.js')}"`)
+  .replace('src="qr-input.js"', `src="${asset('qr-input.js')}"`)
   .replace('src="popup.js"', `src="${asset('popup.js')}"`);
 if (/<header\b/i.test(popupSource)) {
   throw new Error('The popup still has a header; check the screenshot layout before exporting.');

@@ -1,10 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const MAX_CHARS = 1000, MAX_BYTES = 2330;
 const QUIET_ZONE = 4, QR_INK = '#171717', DOWNLOAD_SIZE = 1400;
 const PNG_MIME = 'image/png';
 let currentUrl = '', mode = 'page', matrix = null, encodedText = '', composing = false, copyTimer, generation = 0;
-const encoder = new TextEncoder();
 const downloadGroup = $('download-group');
 const formatButton = $('download-format');
 const formatOptions = $('download-formats');
@@ -35,14 +33,9 @@ function invalidate(label='二维码预览') {
  $('status').textContent='';
  resetCopy();
 }
-function validate(text){
- if(mode==='custom'&&[...text].length>MAX_CHARS)return '内容过长，请缩短文字或链接。';
- if(encoder.encode(text).length>MAX_BYTES)return '内容超过二维码容量，请缩短文字或链接。';
- return '';
-}
 function generate(text) {
  invalidate();
- const error=validate(text);
+ const error=validateQrText(text, mode);
  if(error){
   $('status').textContent=error;
   return;
@@ -190,4 +183,46 @@ downloadGroup.addEventListener('focusout',event=>{
 document.addEventListener('pointerdown',event=>{
  if(!downloadGroup.contains(event.target))closeFormats();
 });
-(async()=>{try{const [tab]=await chrome.tabs.query({active:true,currentWindow:true});currentUrl=tab?.url||'';$('page-title').textContent=tab?.title||'当前页面';$('page-title').title=tab?.title||'';}catch{$('page-title').textContent='当前页面';}$('page-url').textContent=currentUrl||'未能获取链接';$('page-url').title=currentUrl;if(mode==='page')generate(currentUrl);})();
+async function loadCurrentPage() {
+  try {
+    const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+    currentUrl = tab?.url || '';
+    $('page-title').textContent = tab?.title || '当前页面';
+    $('page-title').title = tab?.title || '';
+  } catch {
+    $('page-title').textContent = '当前页面';
+  }
+  $('page-url').textContent = currentUrl || '未能获取链接';
+  $('page-url').title = currentUrl;
+  if (mode === 'page') generate(currentUrl);
+}
+
+async function loadSelection() {
+  document.body.classList.add('selection');
+  document.querySelector('.tabs').hidden = true;
+  $('selection-heading').hidden = false;
+  setMode('custom');
+
+  const input = $('content');
+  input.disabled = true;
+  let selection;
+  try {
+    selection = await chrome.runtime.sendMessage('take-selection');
+  } catch {
+    // A restored window may outlive its one-time handoff.
+  }
+  input.disabled = false;
+  if (typeof selection?.text !== 'string') {
+    $('status').textContent = selection?.error || '选区已失效，请重新选中文字或在此输入。';
+    return;
+  }
+  input.value = selection.text;
+  generate(selection.text);
+  if (!selection.text.trim()) $('status').textContent = '所选内容为空，请重新选择或在此输入。';
+}
+
+if (new URLSearchParams(location.search).has('selection')) {
+  loadSelection();
+} else {
+  loadCurrentPage();
+}
