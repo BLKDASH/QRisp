@@ -3,6 +3,9 @@
 importScripts('qr-input.js');
 
 const MENU_ID = 'selection-qr';
+const POPUP_URL = chrome.runtime.getURL('popup.html');
+const POPUP_TTL_MS = 5_000;
+const WINDOW_TTL_MS = 30_000;
 const pendingSelections = new Map();
 
 function createSelectionMenu() {
@@ -22,9 +25,21 @@ if (chrome.extension.inIncognitoContext) {
   });
 }
 
-function forgetSelection(url) {
-  clearTimeout(pendingSelections.get(url)?.timer);
-  pendingSelections.delete(url);
+function windowKey(windowId) {
+  return `window:${windowId}`;
+}
+
+function forgetSelection(key) {
+  clearTimeout(pendingSelections.get(key)?.timer);
+  pendingSelections.delete(key);
+}
+
+function rememberSelection(key, payload, ttl) {
+  forgetSelection(key);
+  pendingSelections.set(key, {
+    payload,
+    timer: setTimeout(() => forgetSelection(key), ttl)
+  });
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -32,13 +47,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const text = info.selectionText;
   const error = validateQrText(text);
-  const url = chrome.runtime.getURL('popup.html') + '?selection=' + crypto.randomUUID();
-  // A preview can load before windows.create settles, or close before it claims the text.
-  pendingSelections.set(url, {
-    payload: error ? { error } : { text },
-    timer: setTimeout(() => forgetSelection(url), 30_000)
-  });
+  const payload = error ? { error } : { text };
+  const windowId = tab?.windowId;
 
+  if (Number.isInteger(windowId) && windowId >= 0 && typeof chrome.action?.openPopup === 'function') {
+    const key = windowKey(windowId);
+    rememberSelection(key, payload, POPUP_TTL_MS);
+    try {
+      await chrome.action.openPopup({ windowId });
+      return;
+    } catch {
+      forgetSelection(key);
+    }
+  }
+
+  const url = POPUP_URL + '?selection=' + crypto.randomUUID();
+  // A preview can load before windows.create settles, or close before it claims the text.
+  rememberSelection(url, payload, WINDOW_TTL_MS);
   try {
     await chrome.windows.create({
       url, type: 'popup', width: 400, height: 530, incognito: tab?.incognito
@@ -49,9 +74,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message !== 'take-selection' || sender.id !== chrome.runtime.id) return;
-  const entry = pendingSelections.get(sender.url);
+  if (sender.id !== chrome.runtime.id) return;
+
+  let key;
+  if (message === 'take-selection' && typeof sender.url === 'string' && sender.url.startsWith(POPUP_URL + '?selection=')) {
+    key = sender.url;
+  } else if (
+    message?.type === 'take-selection' &&
+    sender.url === POPUP_URL &&
+    Number.isInteger(message.windowId) &&
+    message.windowId >= 0
+  ) {
+    key = windowKey(message.windowId);
+  } else {
+    return;
+  }
+
+  const entry = pendingSelections.get(key);
   if (!entry) return;
-  forgetSelection(sender.url);
+  forgetSelection(key);
   sendResponse(entry.payload);
 });

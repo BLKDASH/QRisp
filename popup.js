@@ -183,9 +183,24 @@ downloadGroup.addEventListener('focusout',event=>{
 document.addEventListener('pointerdown',event=>{
  if(!downloadGroup.contains(event.target))closeFormats();
 });
+function applySelection(selection) {
+  const input = $('content');
+  if (typeof selection?.text === 'string') {
+    input.value = selection.text;
+    setMode('custom');
+    if (!selection.text.trim()) $('status').textContent = '所选内容为空，请重新选择或在此输入。';
+    return;
+  }
+  input.value = '';
+  setMode('custom');
+  $('status').textContent = selection?.error || '选区已失效，请重新选中文字或在此输入。';
+}
+
 async function loadCurrentPage() {
+  let windowId;
   try {
     const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+    windowId = tab?.windowId;
     currentUrl = tab?.url || '';
     $('page-title').textContent = tab?.title || '当前页面';
     $('page-title').title = tab?.title || '';
@@ -194,6 +209,23 @@ async function loadCurrentPage() {
   }
   $('page-url').textContent = currentUrl || '未能获取链接';
   $('page-url').title = currentUrl;
+
+  if (!Number.isInteger(windowId)) {
+    try {
+      windowId = (await chrome.windows?.getCurrent?.())?.id;
+    } catch {}
+  }
+
+  if (Number.isInteger(windowId) && windowId >= 0) {
+    let selection;
+    try {
+      selection = await chrome.runtime?.sendMessage?.({type: 'take-selection', windowId});
+    } catch {}
+    if (selection) {
+      applySelection(selection);
+      return;
+    }
+  }
   if (mode === 'page') generate(currentUrl);
 }
 
@@ -212,13 +244,7 @@ async function loadSelection() {
     // A restored window may outlive its one-time handoff.
   }
   input.disabled = false;
-  if (typeof selection?.text !== 'string') {
-    $('status').textContent = selection?.error || '选区已失效，请重新选中文字或在此输入。';
-    return;
-  }
-  input.value = selection.text;
-  generate(selection.text);
-  if (!selection.text.trim()) $('status').textContent = '所选内容为空，请重新选择或在此输入。';
+  applySelection(selection);
 }
 
 if (new URLSearchParams(location.search).has('selection')) {

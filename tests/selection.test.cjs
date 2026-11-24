@@ -7,6 +7,7 @@ const vm = require('node:vm');
 
 const extensionId = 'abcdefghijklmnopabcdefghijklmnop';
 const getURL = file => `chrome-extension://${extensionId}/${file}`;
+const popupUrl = getURL('popup.html');
 const menuId = 'selection-qr';
 
 function mockEvent() {
@@ -19,9 +20,11 @@ function mockEvent() {
 
 function loadWorker(incognito = false) {
   const menus = [];
+  const popups = [];
   const windows = [];
   const timers = new Map();
   let timerId = 0;
+  let rejectPopup = false;
   let rejectWindow = false;
   const onInstalled = mockEvent();
   const install = mockEvent();
@@ -31,6 +34,12 @@ function loadWorker(incognito = false) {
     extension: { inIncognitoContext: incognito },
     runtime: { id: extensionId, getURL, onInstalled, onMessage },
     contextMenus: { onClicked, create: options => menus.push(options) },
+    action: {
+      async openPopup(options) {
+        popups.push({ ...options });
+        if (rejectPopup) throw new Error('Toolbar popup unavailable');
+      }
+    },
     windows: {
       async create(options) {
         windows.push(options);
@@ -58,15 +67,21 @@ function loadWorker(incognito = false) {
   load('background.js');
 
   return {
-    menus, windows, install, onInstalled,
-    click(text, { id = menuId, incognito = false } = {}) {
-      return onClicked.fire({ menuItemId: id, selectionText: text }, { id: 1, windowId: 1, incognito });
+    menus, popups, windows, timers, install, onInstalled,
+    click(text, { id = menuId, windowId = 1, incognito = false } = {}) {
+      return onClicked.fire({ menuItemId: id, selectionText: text }, { id: 1, windowId, incognito });
     },
-    take(url, message = 'take-selection', id = extensionId) {
+    takePopup(windowId = 1, { url = popupUrl, message = { type: 'take-selection', windowId }, id = extensionId } = {}) {
       let reply;
       onMessage.fire(message, { id, url }, value => { reply = value; });
       return reply;
     },
+    takeWindow(url, message = 'take-selection', id = extensionId) {
+      let reply;
+      onMessage.fire(message, { id, url }, value => { reply = value; });
+      return reply;
+    },
+    failPopup() { rejectPopup = true; },
     failWindow() { rejectWindow = true; },
     expireHandoffs() {
       assert.ok(timers.size > 0, 'The original text must expire if the preview never opens');
@@ -79,7 +94,7 @@ function loadWorker(incognito = false) {
   };
 }
 
-test('installs a selection-only menu and opens a preview without text in the URL', async () => {
+test('installs a selection-only menu and opens the toolbar popup first', async () => {
   const worker = loadWorker();
   assert.equal(worker.menus.length, 0);
   await worker.install.fire();
@@ -95,75 +110,118 @@ test('installs a selection-only menu and opens a preview without text in the URL
   const text = '选中的私密文字?secret=#42 🦊';
   await worker.click(text, { id: 'another-menu' });
   await worker.click(undefined);
+  assert.equal(worker.popups.length, 0);
   assert.equal(worker.windows.length, 0);
-  await worker.click(text);
-  const [preview] = worker.windows;
-  assert.equal(preview.type, 'popup');
-  assert.equal(preview.incognito, false);
-  const url = new URL(preview.url);
-  const token = url.searchParams.get('selection');
-  assert.match(token, /^[0-9a-f-]{36}$/i);
-  assert.equal(preview.url, getURL('popup.html') + '?selection=' + token);
-  assert.ok(!JSON.stringify(preview).includes(text));
-  assert.equal(worker.take(preview.url).text, text);
+
+  await worker.click(text, { windowId: 7 });
+  assert.deepEqual(worker.popups, [{ windowId: 7 }]);
+  assert.equal(worker.windows.length, 0);
+  assert.ok(!JSON.stringify(worker.popups).includes(text));
+  assert.equal(worker.takePopup(7).text, text);
+  assert.equal(worker.takePopup(7)?.text, undefined);
 });
 
-test('a fresh split incognito session registers the menu without an extension update', async () => {
+test('a fresh split incognito session registers the menu and targets the incognito window popup', async () => {
   const worker = loadWorker(true);
   assert.equal(worker.menus.length, 0);
   await worker.install.fire();
   assert.equal(worker.menus.length, 1);
   assert.equal(worker.menus[0].id, menuId);
-  await worker.click('无痕窗口内的选区', { incognito: true });
-  const [preview] = worker.windows;
-  assert.equal(preview.incognito, true);
-  assert.equal(worker.take(preview.url).text, '无痕窗口内的选区');
+  await worker.click('无痕窗口内的选区', { windowId: 9, incognito: true });
+  assert.deepEqual(worker.popups, [{ windowId: 9 }]);
+  assert.equal(worker.windows.length, 0);
+  assert.equal(worker.takePopup(9).text, '无痕窗口内的选区');
 });
 
-test('independent clicks hand off exact text once, even when previews open in reverse order', async () => {
+test('independent window clicks hand off exact text once, and repeated clicks in one window replace stale text', async () => {
   const worker = loadWorker();
   const first = '  第一行\n第二行 😀  ';
   const second = 'https://example.test/?token=<>&秘密';
-  const opening = Promise.all([worker.click(first), worker.click(second)]);
-  const [a, b] = worker.windows;
-  assert.notEqual(a.url, b.url);
-  assert.equal(a.incognito, false);
-  assert.equal(worker.take(b.url).text, second);
-  assert.equal(worker.take(b.url)?.text, undefined);
-  assert.equal(worker.take(a.url).text, first);
-  assert.equal(worker.take(a.url)?.text, undefined);
+  const opening = Promise.all([
+    worker.click(first, { windowId: 1 }),
+    worker.click(second, { windowId: 2 })
+  ]);
+  assert.deepEqual(worker.popups, [{ windowId: 1 }, { windowId: 2 }]);
+  assert.equal(worker.takePopup(2).text, second);
+  assert.equal(worker.takePopup(2)?.text, undefined);
+  assert.equal(worker.takePopup(1).text, first);
+  assert.equal(worker.takePopup(1)?.text, undefined);
   await opening;
+
+  await worker.click('旧选区', { windowId: 3 });
+  await worker.click('新选区', { windowId: 3 });
+  assert.equal(worker.timers.size, 1);
+  assert.equal(worker.takePopup(3).text, '新选区');
+  assert.equal(worker.timers.size, 0);
 });
 
-test('other senders, pages and message types cannot claim or consume the selection', async () => {
+test('other senders, pages, windows and message types cannot claim or consume the selection', async () => {
   const worker = loadWorker();
-  await worker.click('仅限于对应预览');
-  const { url } = worker.windows[0];
-  assert.equal(worker.take(url, 'other-message')?.text, undefined);
-  assert.equal(worker.take(url, 'take-selection', 'other-extension')?.text, undefined);
-  assert.equal(worker.take(url.replace(getURL(''), 'https://example.test/'))?.text, undefined);
-  assert.equal(worker.take(url.replace('popup.html', 'other.html'))?.text, undefined);
-  assert.equal(worker.take(url + '&extra=1')?.text, undefined);
-  assert.equal(worker.take(url).text, '仅限于对应预览');
+  await worker.click('仅限于对应窗口弹窗', { windowId: 4 });
+  assert.equal(worker.takePopup(4, { message: 'other-message' })?.text, undefined);
+  assert.equal(worker.takePopup(4, { message: 'take-selection' })?.text, undefined);
+  assert.equal(worker.takePopup(4, { id: 'other-extension' })?.text, undefined);
+  assert.equal(worker.takePopup(4, { url: 'https://example.test/popup.html' })?.text, undefined);
+  assert.equal(worker.takePopup(4, { url: getURL('other.html') })?.text, undefined);
+  assert.equal(worker.takePopup(4, { url: popupUrl + '?selection=fake' })?.text, undefined);
+  assert.equal(worker.takePopup(5)?.text, undefined);
+  assert.equal(worker.takePopup(-1)?.text, undefined);
+  assert.equal(worker.takeWindow('window:4')?.text, undefined);
+  assert.equal(worker.takePopup(4).text, '仅限于对应窗口弹窗');
 });
 
-test('failed and expired previews discard the pending selection', async () => {
+test('falls back to a standalone popup window when toolbar openPopup fails or windowId is unavailable', async () => {
+  const worker = loadWorker();
+  worker.failPopup();
+  const text = 'PWA 无工具栏窗口内的选区';
+  await worker.click(text, { windowId: 2, incognito: true });
+  assert.deepEqual(worker.popups, [{ windowId: 2 }]);
+  assert.equal(worker.takePopup(2)?.text, undefined);
+
+  assert.equal(worker.windows.length, 1);
+  const [preview] = worker.windows;
+  assert.equal(preview.type, 'popup');
+  assert.equal(preview.incognito, true);
+  const url = new URL(preview.url);
+  const token = url.searchParams.get('selection');
+  assert.match(token, /^[0-9a-f-]{36}$/i);
+  assert.equal(preview.url, popupUrl + '?selection=' + token);
+  assert.ok(!JSON.stringify(preview).includes(text));
+  assert.equal(worker.takeWindow(preview.url + '&extra=1')?.text, undefined);
+  assert.equal(worker.takeWindow(preview.url).text, text);
+  assert.equal(worker.takeWindow(preview.url)?.text, undefined);
+
+  await worker.click('缺少窗口编号时回退', { windowId: -1 });
+  assert.equal(worker.windows.length, 2);
+  assert.equal(worker.takeWindow(worker.windows[1].url).text, '缺少窗口编号时回退');
+});
+
+test('failed fallback windows and expired handoffs discard the pending selection', async () => {
   const failed = loadWorker();
+  failed.failPopup();
   failed.failWindow();
   await failed.click('创建失败时清理');
-  assert.equal(failed.take(failed.windows[0].url)?.text, undefined);
+  assert.equal(failed.timers.size, 0);
+  assert.equal(failed.takePopup(1)?.text, undefined);
+  assert.equal(failed.takeWindow(failed.windows[0].url)?.text, undefined);
 
-  const expired = loadWorker();
-  await expired.click('超时即清理');
-  expired.expireHandoffs();
-  assert.equal(expired.take(expired.windows[0].url)?.text, undefined);
+  const expiredPopup = loadWorker();
+  await expiredPopup.click('气泡超时即清理');
+  expiredPopup.expireHandoffs();
+  assert.equal(expiredPopup.takePopup(1)?.text, undefined);
+
+  const expiredWindow = loadWorker();
+  expiredWindow.failPopup();
+  await expiredWindow.click('小窗超时即清理');
+  expiredWindow.expireHandoffs();
+  assert.equal(expiredWindow.takeWindow(expiredWindow.windows[0].url)?.text, undefined);
 });
 
 test('over-capacity selections deliver an error without returning any original text', async () => {
   const worker = loadWorker();
   for (const text of ['a'.repeat(100_000), '中'.repeat(777)]) {
-    await worker.click(text);
-    const reply = worker.take(worker.windows.at(-1).url);
+    await worker.click(text, { windowId: 1 });
+    const reply = worker.takePopup(1);
     assert.equal(typeof reply.error, 'string');
     assert.ok(reply.error.length > 0);
     assert.equal(reply.text, undefined);

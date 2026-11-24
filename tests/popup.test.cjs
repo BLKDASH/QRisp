@@ -10,6 +10,7 @@ async function setup(fail=false,copyFail=false,preview={}){
  e['download-formats'].hidden=true;
  e['download-formats'].querySelector=()=>firstFormat;
  e['download-group'].contains=node=>[e.download,e['download-format'],firstFormat].includes(node);
+ e['selection-heading'].hidden=true;
  document.body=new Element();
  document.querySelector=()=>tabs;
  document.getElementById=id=>e[id];
@@ -18,6 +19,7 @@ async function setup(fail=false,copyFail=false,preview={}){
   element.click=()=>downloads.push({name:element.download,blob:blobs.get(element.href)});
   return element;
  };
+ const windowId = 'windowId' in preview ? preview.windowId : 1;
  const ctx={
   TextEncoder,Blob,console,Date,document,URLSearchParams,
   location:{search:preview.search || ''},
@@ -33,15 +35,19 @@ async function setup(fail=false,copyFail=false,preview={}){
   },
   setTimeout:(fn,ms)=>{timers.set(++tid,{fn,ms});return tid},
   clearTimeout:id=>timers.delete(id),
-  chrome:{runtime:{sendMessage:async message=>{
-   messages.push(message);
-   if(preview.error)throw Error('handoff unavailable');
-   return preview.reply;
-  }},tabs:{query:async options=>{
-   queries.push(options);
-   if(fail)throw Error('fail');
-   return [{url:'https://www.figma.com/community',title:'Figma Community'}];
-  }}},
+  chrome:{
+   runtime:{sendMessage:async message=>{
+    messages.push(typeof message==='object'&&message?{...message}:message);
+    if(preview.error)throw Error('handoff unavailable');
+    return preview.reply;
+   }},
+   tabs:{query:async options=>{
+    queries.push(options);
+    if(fail)throw Error('fail');
+    return [{windowId,url:'https://www.figma.com/community',title:'Figma Community'}];
+   }},
+   windows:{getCurrent:async ()=>({id:windowId})}
+  },
   navigator:{clipboard:{
    async writeText(text){
     if(copyFail)throw Error('fail');
@@ -170,24 +176,60 @@ t.e.content.listeners.input();
 await t.e.copy.listeners.click();
 assert.match(t.e.status.textContent,/复制二维码失败/);
 assert.equal(t.queries.length,1);
-assert.equal(t.messages.length,0);
+assert.deepEqual(t.messages,[{type:'take-selection',windowId:1}]);
+
+const selected='  中文 😀\n<tag> & https://example.test/?a=1  ';
+t=await setup(false,false,{windowId:5,reply:{text:selected}});
+assert.equal(t.tabs.hidden,false);
+assert.equal(t.e['selection-heading'].hidden,true);
+assert.equal(t.document.body.classes.has('selection'),false);
+assert.equal(t.e['custom-tab'].attributes['aria-selected'],'true');
+assert.equal(t.e['page-panel'].hidden,true);
+assert.equal(t.e['custom-panel'].hidden,false);
+assert.equal(t.e.content.value,selected);
+assert.deepEqual(t.encoded,[selected]);
+assert.deepEqual(t.messages,[{type:'take-selection',windowId:5}]);
+assert.equal(t.queries.length,1);
+assert.equal(t.e.qr.hidden,false);
+assert.equal(t.e['copy-label'].textContent,'复制二维码');
+await t.e.copy.listeners.click();
+await t.e.download.listeners.click();
+assert.equal(t.copied.length,0);
+assert.equal(t.copiedImages.length,1);
+assert.equal(t.downloads[0].blob.type,'image/png');
+t.e['page-tab'].listeners.click();
+assert.equal(t.encoded.at(-1),'https://www.figma.com/community');
+t.e['custom-tab'].listeners.click();
+assert.equal(t.e.content.value,selected);
+
+t=await setup(true,false,{windowId:8,reply:{text:'标签页查询失败仍展示选区'}});
+assert.equal(t.e.qr.hidden,false);
+assert.deepEqual(t.encoded,['标签页查询失败仍展示选区']);
+
+for(const [options,status] of [
+ [{reply:{error:'内容过长，请缩短文字或链接。'}},/内容过长/],
+ [{reply:{text:'   '}},/所选内容为空/]
+]){
+ t=await setup(false,false,options);
+ assert.equal(t.tabs.hidden,false);
+ assert.equal(t.e['custom-tab'].attributes['aria-selected'],'true');
+ assert.equal(t.e.qr.hidden,true);
+ assert.equal(t.e.download.disabled,true);
+ assert.equal(t.e.copy.disabled,true);
+ assert.match(t.e.status.textContent,status);
+}
 
 const search='?selection=test';
-const selected='  中文 😀\n<tag> & https://example.test/?a=1  ';
 t=await setup(false,false,{search,reply:{text:selected}});
 assert.ok(t.tabs.hidden);
 assert.equal(t.e['selection-heading'].hidden,false);
+assert.equal(t.document.body.classes.has('selection'),true);
 assert.equal(t.e['page-panel'].hidden,true);
 assert.equal(t.e.content.value,selected);
 assert.deepEqual(t.encoded,[selected]);
 assert.deepEqual(t.messages,['take-selection']);
 assert.equal(t.queries.length,0);
 assert.equal(t.e.qr.hidden,false);
-await t.e.copy.listeners.click();
-await t.e.download.listeners.click();
-assert.equal(t.copied.length,0);
-assert.equal(t.copiedImages.length,1);
-assert.equal(t.downloads[0].blob.type,'image/png');
 t.e.content.value='编辑后的选区';
 t.e.content.listeners.input();
 assert.equal(t.encoded.at(-1),t.e.content.value);
@@ -206,4 +248,4 @@ for(const [options,status] of [
  assert.equal(t.e.content.disabled,false);
  assert.match(t.e.status.textContent,status);
 }
-console.log('PASS: toolbar, selection preview and recovery, live edits, PNG/JPG/SVG downloads, Unicode limits, IME, keyboard and clipboard actions.');})().catch(e=>{console.error(e);process.exitCode=1});
+console.log('PASS: toolbar, toolbar selection handoff, fallback preview and recovery, live edits, PNG/JPG/SVG downloads, Unicode limits, IME, keyboard and clipboard actions.');})().catch(e=>{console.error(e);process.exitCode=1});

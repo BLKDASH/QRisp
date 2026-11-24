@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "127",
   "name": "QRisp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "将当前网址、网页选中文字或自定义内容离线生成二维码，支持复制和下载。",
   "permissions": ["activeTab", "clipboardWrite", "contextMenus"],
   "background": { "service_worker": "background.js" },
